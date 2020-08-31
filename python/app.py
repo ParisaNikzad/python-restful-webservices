@@ -17,8 +17,22 @@ def messages_route():
     with sqlite3.connect(DBPATH) as conn:
         messages_res = conn.execute("select body from messages")
         messages = [m[0] for m in messages_res]
-        return jsonify(list(messages)), 200
+        state_res = conn.execute("select * from state")
+        states = state_res.fetchall()
+        states_dict = dict(states)
+        translated_messages = []
 
+        def dashrepl(matchobj):
+            if (matchobj.group(1) in states_dict):
+                if (states_dict.get(matchobj.group(1))):
+                    return states_dict.get(matchobj.group(1))
+            else:
+                return matchobj.group(2)
+
+        for message in messages:
+            translated_messages.append(re.sub('{([a-zA-Z0-9]+)\|([a-zA-Z0-9\!\?\'\"\s]*)}', dashrepl, message))
+
+        return jsonify(list(translated_messages)), 200
 
 @app.route("/search", methods=["POST"])
 def search_route():
