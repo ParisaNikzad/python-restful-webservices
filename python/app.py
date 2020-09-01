@@ -4,6 +4,7 @@ import json
 import re # regular expressions
 from pprint import pprint
 
+from flask_restful import abort
 
 app = Flask(__name__)
 DBPATH = "../database.db"
@@ -46,12 +47,34 @@ def search_route():
 
     with sqlite3.connect(DBPATH) as conn:
         query = request.get_json().get("query")
-        res = conn.execute(
-            "select id, title from answers where title like ? ", [f"%{query}%"],
-        )
-        answers = [{"id": r[0], "title": r[1]} for r in res]
-        print(query, "--> ")
-        pprint(answers)
+        if not query:
+            abort(400)
+
+        def statement_condition_and_variables_builder(query):
+            answersCondition = ""
+            blocksCondition = ""
+            words = query.split(" ")
+            variable = []
+            for word in words:
+                answersCondition = answersCondition + "a.title like ? and "
+                blocksCondition = blocksCondition + "json_each.value like ? and "
+                formatedWord = "%" + word + "%"
+                variable.append(formatedWord)
+            variables = []
+            for i in range(2):
+                variables = variables + variable
+
+            statement = "select a.id, a.title, b.content from answers as a join blocks as b, json_each(json_array(b.content)) on a.id = b.answer_id where "
+            answersCondition = "(" + answersCondition[:-5] + ")"
+            blocksCondition = "(" + blocksCondition[:-5] + ")"
+            statement = statement + "(" + answersCondition + " or " + blocksCondition + ")"
+            return statement, variables
+
+
+        statement, variables = statement_condition_and_variables_builder(query)
+        res = conn.execute(statement, variables)
+
+        answers = [{"id": r[0], "title": r[1], "content": json.loads(r[2])} for r in res]
         return jsonify(answers), 200
 
 
