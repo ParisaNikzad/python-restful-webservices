@@ -57,14 +57,14 @@ def search_route():
             variable = []
             for word in words:
                 answersCondition = answersCondition + "a.title like ? and "
-                blocksCondition = blocksCondition + "json_extract( value, '$.body' ) like ? and "
+                blocksCondition = blocksCondition + "b.content like ? and "
                 formatedWord = "%" + word + "%"
                 variable.append(formatedWord)
             variables = []
             for i in range(2):
                 variables = variables + variable
 
-            statement = "select a.id, a.title, b.content from answers as a join blocks as b, json_each(json_array(b.content)) on a.id = b.answer_id where "
+            statement = "select a.id, a.title, b.content from answers as a join blocks as b on a.id = b.answer_id where "
             answersCondition = "(" + answersCondition[:-5] + ")"
             blocksCondition = "(" + blocksCondition[:-5] + ")"
             statement = statement + "(" + answersCondition + " or " + blocksCondition + ")"
@@ -73,6 +73,7 @@ def search_route():
 
         statement, variables = statement_condition_and_variables_builder(query)
         res = conn.execute(statement, variables)
+        print(statement)
 
         answers = [{"id": r[0], "title": r[1], "content": json.loads(r[2])} for r in res]
         return jsonify(answers), 200
