@@ -57,7 +57,7 @@ def search_route():
             variable = []
             for word in words:
                 answersCondition = answersCondition + "a.title like ? and "
-                blocksCondition = blocksCondition + "json_each.value like ? and "
+                blocksCondition = blocksCondition + "json_extract( value, '$.body' ) like ? and "
                 formatedWord = "%" + word + "%"
                 variable.append(formatedWord)
             variables = []
