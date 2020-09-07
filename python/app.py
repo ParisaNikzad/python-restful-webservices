@@ -1,13 +1,15 @@
 from flask import Flask, request, jsonify
 import sqlite3
 import json
-import re # regular expressions
+import re  # regular expressions
 from pprint import pprint
+from collections import defaultdict
 
 from flask_restful import abort
 
 app = Flask(__name__)
 DBPATH = "../database.db"
+
 
 @app.route("/messages", methods=["GET"])
 def messages_route():
@@ -35,6 +37,7 @@ def messages_route():
 
         return jsonify(list(translated_messages)), 200
 
+
 @app.route("/search", methods=["POST"])
 def search_route():
     """
@@ -50,33 +53,54 @@ def search_route():
         if not query:
             abort(400)
 
-        def statement_condition_and_variables_builder(query):
-            answersCondition = ""
-            blocksCondition = ""
-            words = query.split(" ")
-            variable = []
-            for word in words:
-                answersCondition = answersCondition + "a.title like ? and "
-                blocksCondition = blocksCondition + "b.content like ? and "
-                formatedWord = "%" + word + "%"
-                variable.append(formatedWord)
-            variables = []
-            for i in range(2):
-                variables = variables + variable
+        def search_answers(title, word):
+            if re.search(rf"\b{word}\b", title, re.IGNORECASE):
+                return True
 
-            statement = "select a.id, a.title, b.content from answers as a join blocks as b on a.id = b.answer_id where "
-            answersCondition = "(" + answersCondition[:-5] + ")"
-            blocksCondition = "(" + blocksCondition[:-5] + ")"
-            statement = statement + "(" + answersCondition + " or " + blocksCondition + ")"
-            return statement, variables
+        """
+        to extract all the values of the nested json 
+        """
+        def search_Blocks(object, word, flag):
+            if not flag:
+                if isinstance(object, dict):
+                    for k, v in object.items():
+                        if isinstance(v, list):
+                            if search_Blocks(v, word, False):
+                                return True
+                        elif isinstance(v, str):
+                            if k != 'type':
+                                if re.search(rf"\b{word}\b", v, re.IGNORECASE):
+                                    return True
 
+                elif isinstance(object, list):
+                    for item in object:
+                        if search_Blocks(item, word, False):
+                            return True
+            else:
+                return True
 
-        statement, variables = statement_condition_and_variables_builder(query)
-        res = conn.execute(statement, variables)
-        print(statement)
-
+        statement = "select a.id, a.title, b.content from answers as a join blocks as b on a.id = b.answer_id"
+        res = conn.execute(statement)
         answers = [{"id": r[0], "title": r[1], "content": json.loads(r[2])} for r in res]
-        return jsonify(answers), 200
+        words = query.split(" ")
+        results = []
+
+        """
+        In each row, for each word of the query, search in answers and blocks
+        validate if all the words have been found in either answers or blocks 
+        """
+        for answer in answers:
+            dword = defaultdict(lambda: 0)
+            for word in words:
+                if search_answers(answer['title'], word):
+                    dword[word] = 1
+                if search_Blocks(answer['content'], word, False):
+                    dword[word] = 1
+            dword_values = [dword[word] for word in words]
+            if (min(dword_values)) > 0:
+                results.append(answer)
+
+        return jsonify(results), 200
 
 
 if __name__ == "__main__":
